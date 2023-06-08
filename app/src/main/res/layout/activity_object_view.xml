@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/starId"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_margin="8dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        tools:text="Star ID"/>
+
+    <TextView
+        android:id="@+id/starX"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_margin="8dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        tools:text="X Coordinate"/>
+
+    <TextView
+        android:id="@+id/starY"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_margin="8dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        tools:text="Y Coordinate"/>
+
+    <TextView
+        android:id="@+id/starR"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_margin="8dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        tools:text="Star Radius"/>
+
+    <TextView
+        android:id="@+id/starB"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_margin="8dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        tools:text="Star Brightness"/>
+
+</LinearLayout>

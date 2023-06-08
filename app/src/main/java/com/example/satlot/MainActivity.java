@@ -4,9 +4,12 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 
+import android.widget.Toast;
+
 import okhttp3.*;
 
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -14,10 +17,28 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.telecom.Call;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.lang.reflect.Type;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.List;
+import java.util.Map;
+
 import android.util.Base64;
 import android.view.View;
 import android.widget.ImageView;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -30,7 +51,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private static final int REQUEST_TAKE_PHOTO = 1;
     private static final int REQUEST_SELECT_PICTURE = 2;
 
-    String detected_base64 = "default";
+    String detected_base64 = ""; // Store the data returned from server
+    List<Map<String, Integer>> starsList; // Store the detected stars info list
+    String original_base64 = ""; // Store the original image in base64
+
     //Declare Buttons
     AppCompatButton take_picture;
     AppCompatButton open_gallery;
@@ -82,6 +106,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+
+    // Function that called when image is selected. Both for camera and storage
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -99,30 +125,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 byte[] byteArray = byteArrayOutputStream.toByteArray();
 
                 // Encode byte array to Base64 string
-                String encodedImage = Base64.encodeToString(byteArray, Base64.DEFAULT);
+                original_base64 = Base64.encodeToString(byteArray, Base64.DEFAULT);
                 String size = "(" + height + "," + width + ")";
-
-                // SEND TO OFEK'S FUNCTION
-                try {
-                    postRequest(encodedImage, size); // Call to GCP function- identify objects
-                    while (detected_base64 == "default") {
-                    }
-                    if (detected_base64 != "error") {
-                        // Decode the Base64 string to a byte array
-                        byte[] decodedBytes = Base64.decode(detected_base64, Base64.DEFAULT);
-
-                        // Create a Bitmap from the byte array
-                        Bitmap newbitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
-                        openImageDisplayActivity(newbitmap);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
-                System.out.println("The new picture in base64:");
-                System.out.println(detected_base64);
-                System.out.println("*******************************************");
+                getCircledStars(original_base64, size);
 
             } else if (requestCode == REQUEST_SELECT_PICTURE) // Photo selected from gallery
             {
@@ -138,10 +143,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     byte[] byteArray = byteArrayOutputStream.toByteArray();
 
                     // Encode byte array to Base64 string
-                    String encodedImage = Base64.encodeToString(byteArray, Base64.DEFAULT);
+                    original_base64 = Base64.encodeToString(byteArray, Base64.DEFAULT);
 
                     String size = "(+" + height + "," + width + ")";
-                    // SEND TO OFEK'S FUNCTION
+                    getCircledStars(original_base64, size);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -149,68 +154,112 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    private void openImageDisplayActivity(Bitmap imageBitmap) {
-        Intent intent = new Intent(MainActivity.this, DisplayPicture.class);
-        intent.putExtra("imageBitmap", imageBitmap);
-        startActivity(intent);
-    }
 
-    private void openImageDisplayActivity(Uri imageUri) {
-        Intent intent = new Intent(MainActivity.this, DisplayPicture.class);
-        intent.putExtra("imageUri", imageUri.toString());
-        startActivity(intent);
-    }
-
-
-    public void postRequest(String imgStr, String size) throws IOException, JSONException {
-        OkHttpClient client = new OkHttpClient();
-
-        // Create the JSON payload
-        JSONObject payload = new JSONObject();
-        payload.put("img_str", imgStr);
-        payload.put("size", size);
-
-        // Convert the JSON payload to a byte array
-        byte[] payloadBytes = payload.toString().getBytes("UTF-8");
-
-
-        System.out.println("&&&&&&&&&&&&&&&&&&&&&&&&7");
-        System.out.println(payloadBytes);
-        System.out.println("&&&&&&&&&&&&&&&&&&&&&&&&&");
-
-        RequestBody body = RequestBody.create(
-                MediaType.parse("application/json; charset=utf-8"), payloadBytes);
-
-        Request request = new Request.Builder()
-                .url("https://europe-west2-satlot-app.cloudfunctions.net/circle-stars")
-                .post(body)
-                .build();
-
-        client.newCall(request).enqueue(new Callback() {
+    public void getCircledStars(String imgStr, String size) { // External server function call
+        Thread thread = new Thread(new Runnable() {
             @Override
-            public void onResponse(@NonNull okhttp3.Call call, @NonNull Response response) throws IOException {
-                System.out.println("********************");
-                System.out.println("OnResponse");
-                if (response.isSuccessful()) {
-                    detected_base64 = response.body().string();
-                    System.out.println("********************");
-                    System.out.println("sUCCESSFULResponse");
-                    // Use the response
-                } else {
-                    System.out.println("********************");
-                    System.out.println("fAILResponse");
-                    detected_base64 = "error";
-                    // Handle the error
+            public void run() {
+                try {
+                    // Create URL
+                    URL url = new URL("http://10.0.0.9:5000/circle_stars");
+                    // Create connection
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("POST");
+                    conn.setRequestProperty("Content-Type", "application/json; utf-8");
+                    conn.setRequestProperty("Accept", "application/json");
+                    conn.setDoOutput(true);
+                    conn.setDoInput(true);
+
+                    // Create the JSON payload
+                    JSONObject jsonParam = new JSONObject();
+                    jsonParam.put("img_str", imgStr);
+                    jsonParam.put("size", size);
+
+                    // Write data
+                    OutputStream os = conn.getOutputStream();
+                    byte[] input = jsonParam.toString().getBytes("utf-8");
+                    os.write(input, 0, input.length);
+                    os.close();
+
+                    // Read response
+                    InputStream inputStream = conn.getInputStream();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "utf-8"));
+                    StringBuilder response = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+                    reader.close();
+                    inputStream.close();
+
+                    // Process the response
+                    JSONArray jsonArrResponse = new JSONArray(response.toString());
+                    JSONObject jsonResponse = jsonArrResponse.getJSONObject(0);
+                    String stars = jsonResponse.getString("stars");
+                    String image = jsonResponse.getString("image");
+
+                    // Assign the retrieved values to the variables
+                    starsList = new Gson().fromJson(stars, new TypeToken<List<Map<String, Integer>>>() {
+                    }.getType());
+                    detected_base64 = image;
+
+                    System.out.println(starsList.toString());
+                    System.out.println(detected_base64);
+
+                    conn.disconnect();
+                    openImageDisplayActivity();
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    ShowError("Error while processing image"); // Error toast
                 }
             }
+        });
 
+        thread.start();
+    }
+
+    public void ShowError(String msg) {
+        runOnUiThread(new Runnable() {
             @Override
-            public void onFailure(@NonNull okhttp3.Call call, @NonNull IOException e) {
-                System.out.println("********************");
-                System.out.println("OnfAILURE");
-                e.printStackTrace();
+            public void run() {
+                Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+
+    private void openImageDisplayActivity() {
+        try {
+            // Create temporary files to store the base64 strings
+            File originalFile = createTempFile("original", ".txt");
+            File detectedFile = createTempFile("detected", ".txt");
+
+            // Write the base64 strings to the files
+            writeStringToFile(originalFile, original_base64);
+            writeStringToFile(detectedFile, detected_base64);
+
+            // Create an intent to start the DisplayPicture activity
+            Intent intent = new Intent(MainActivity.this, DisplayPicture.class);
+            intent.putExtra("original", originalFile.getAbsolutePath());
+            intent.putExtra("detected", detectedFile.getAbsolutePath());
+            intent.putExtra("stars", (Serializable) starsList);
+            startActivity(intent);
+        } catch (IOException e) {
+            e.printStackTrace();
+            ShowError("Error while passing intent"); // Error toast
+        }
+    }
+
+    private File createTempFile(String prefix, String extension) throws IOException {
+        File tempDir = getCacheDir();
+        return File.createTempFile(prefix, extension, tempDir);
+    }
+
+    private void writeStringToFile(File file, String data) throws IOException {
+        FileOutputStream outputStream = new FileOutputStream(file);
+        outputStream.write(data.getBytes());
+        outputStream.close();
     }
 }
 
