@@ -4,6 +4,12 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
+import android.content.pm.PackageManager;
+import android.database.Cursor;
+import android.media.ExifInterface;
+import android.os.Environment;
 import android.widget.Toast;
 
 import okhttp3.*;
@@ -18,6 +24,22 @@ import android.os.Bundle;
 import android.provider.MediaStore;
 import android.telecom.Call;
 
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import android.location.Location;
+
+import java.io.File;
+
+import android.view.Surface;
+
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -44,9 +66,10 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
-
+    private static final int REQUEST_CAMERA_PERMISSION = 3;
     // handle change of pic initialisation
     private static final int REQUEST_TAKE_PHOTO = 1;
     private static final int REQUEST_SELECT_PICTURE = 2;
@@ -96,13 +119,36 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         startActivityForResult(Intent.createChooser(selectPicture, "Select Picture"), REQUEST_SELECT_PICTURE);
     }
 
-    private void open_camera() { // Take Picture
+    private void open_camera() { // Asks for permission to use camera, if hasn't got one
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
+        } else {
+            startCameraIntent();
+        }
+    }
 
+    private void startCameraIntent() { //  Actuall camera opening
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         try {
             startActivityForResult(takePictureIntent, REQUEST_TAKE_PHOTO);
         } catch (ActivityNotFoundException e) {
-            System.out.println(e);
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (false) {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+        if (requestCode == REQUEST_CAMERA_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Camera permission granted, start the camera intent
+                startCameraIntent();
+            } else {
+                // Camera permission denied, show a message or handle the error
+                Toast.makeText(this, "Camera permission denied", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
@@ -117,6 +163,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             {
                 Bundle extras = data.getExtras();
                 Bitmap bitmap = (Bitmap) extras.get("data");
+
+                // Extract metadata from the image file
+                try {
+                    extractImageMetadata(bitmap); // NEEDS TO BE TESTED ON REAL DEVICE
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
                 int width = bitmap.getWidth();
                 int height = bitmap.getHeight();
                 // Convert bitmap to byte array
@@ -128,32 +182,30 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 original_base64 = Base64.encodeToString(byteArray, Base64.DEFAULT);
                 String size = "(" + height + "," + width + ")";
                 getCircledStars(original_base64, size);
+            }
+        } else if (requestCode == REQUEST_SELECT_PICTURE) // Photo selected from gallery
+        {
+            Uri selectedImageUri = data.getData();
 
-            } else if (requestCode == REQUEST_SELECT_PICTURE) // Photo selected from gallery
-            {
-                Uri selectedImageUri = data.getData();
+            try {
+                Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), selectedImageUri);
+                int width = bitmap.getWidth();
+                int height = bitmap.getHeight();
+                // Convert bitmap to byte array
+                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, byteArrayOutputStream);
+                byte[] byteArray = byteArrayOutputStream.toByteArray();
 
-                try {
-                    Bitmap bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), selectedImageUri);
-                    int width = bitmap.getWidth();
-                    int height = bitmap.getHeight();
-                    // Convert bitmap to byte array
-                    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, byteArrayOutputStream);
-                    byte[] byteArray = byteArrayOutputStream.toByteArray();
+                // Encode byte array to Base64 string
+                original_base64 = Base64.encodeToString(byteArray, Base64.DEFAULT);
 
-                    // Encode byte array to Base64 string
-                    original_base64 = Base64.encodeToString(byteArray, Base64.DEFAULT);
-
-                    String size = "(+" + height + "," + width + ")";
-                    getCircledStars(original_base64, size);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                String size = "(+" + height + "," + width + ")";
+                getCircledStars(original_base64, size);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
-
 
     public void getCircledStars(String imgStr, String size) { // External server function call
         Thread thread = new Thread(new Runnable() {
@@ -261,6 +313,53 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         outputStream.write(data.getBytes());
         outputStream.close();
     }
+
+    private void extractImageMetadata(Bitmap bitmap) throws IOException { // NEEDS TO BE TESTED ON REAL DEVICE
+        // Save the bitmap to a temporary file
+        File tempFile = createTempFile("bitmap","jpg");
+        if (tempFile == null) {
+            // Error occurred while creating the temporary file
+            return;
+        }
+
+        try {
+            // Compress the bitmap to the file
+            OutputStream outputStream = new FileOutputStream(tempFile);
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream);
+            outputStream.close();
+            System.out.println("***********************************************************");
+            // Create an ExifInterface instance using the file path
+            ExifInterface exifInterface = new ExifInterface(tempFile.getAbsolutePath());
+
+            // Extract timestamp
+            String timestamp = exifInterface.getAttribute(ExifInterface.TAG_DATETIME);
+            System.out.println("***********************************************************");
+            System.out.println("***********************************************************");
+            // Extract latitude and longitude
+            float[] latLong = new float[2];
+
+            System.out.println("***********************************************************");
+            System.out.println("TimeStamp: " + timestamp);
+            System.out.println("***********************************************************");
+
+            float latitude = latLong[0];
+            float longitude = latLong[1];
+            System.out.println("***********************************************************");
+            System.out.println("LAT: " + latitude);
+            System.out.println("LONG: " + longitude);
+            System.out.println("***********************************************************");
+        }
+
+        catch (
+                IOException e) {
+            e.printStackTrace();
+        } finally {
+            // Delete the temporary file
+            tempFile.delete();
+        }
+
+    }
+
 }
 
 

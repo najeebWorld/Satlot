@@ -33,9 +33,6 @@ public class DisplayPicture extends AppCompatActivity implements View.OnClickLis
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        System.out.println("!@#!@#!@#!@#!@#!@#!@#!@#!@#!@#");
-        System.out.println("MOVEDDDDDDDDDDDDDDDDDDDDDDD");
-        System.out.println("!@#!@#!@#!@#!@#!@#!@#!@#!@#!@#");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_display_picture);
 
@@ -47,18 +44,6 @@ public class DisplayPicture extends AppCompatActivity implements View.OnClickLis
         // Retrieve the image URI or bitmap from the intent extras
         if (getIntent().hasExtra("stars")) {
             List<Map<String, Integer>> starsList = (List<Map<String, Integer>>) getIntent().getSerializableExtra("stars");
-            System.out.println("*********************************");
-            for (int i = 0; i < starsList.size(); i++) {
-                System.out.println("Map " + (i + 1) + ":");
-                Map<String, Integer> map = starsList.get(i);
-                for (Map.Entry<String, Integer> entry : map.entrySet()) {
-                    String key = entry.getKey();
-                    Integer value = entry.getValue();
-                    System.out.println(key + " = " + value);
-                }
-                System.out.println();
-            }
-            System.out.println("*********************************");
             stars_adp = new CustomAdapter(getApplicationContext(), starsList);
             stars.setAdapter(stars_adp);
         }
