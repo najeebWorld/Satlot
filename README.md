@@ -29,7 +29,7 @@ Satlot is designed to help users track stars. By interacting with a Stellarium s
 
 ## Testing
 
-*Please provide specific instructions on how to run the tests in `test_server.py`.*
+ `test_server.py`.*
 
 ## Contributing
 
@@ -37,4 +37,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-*Please specify the license under which your project is released.*
+Najeeb Abdalla.
